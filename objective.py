@@ -7,10 +7,11 @@ import sys
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size = AgentOobaVars["max-context"]/4,
-    chunk_overlap  = AgentOobaVars["max-context"]/20,
-    length_function = get_encoded_length
+    chunk_size=AgentOobaVars["max-context"] / 4,
+    chunk_overlap=AgentOobaVars["max-context"] / 20,
+    length_function=get_encoded_length
 )
+
 
 class Objective:
     def __init__(self, objective, task_idx, recursion_level, parent=None):
@@ -45,7 +46,7 @@ class Objective:
                     context_resources=False,
                     context_abilities=False
                     ):
-        constr=""
+        constr = ""
         context_resources = context_resources and "resources-needed" in self.context
         context_abilities = context_abilities and "abilities-needed" in self.context
         context_objectives = context_objectives and self.parent and (self.parent_task_idx > 0)
@@ -59,7 +60,8 @@ class Objective:
                 constr += f"Abilities available:\n{self.context['abilities-available'] if 'abilities-available' in self.context else 'None'}\n"
             if context_objectives:
                 constr += f"The following is a list of objectives that have already been completed:\n"
-                constr += "\n".join([f"Objective {self.recursion_level-1}, Task {i+1}: {self.parent.tasks[i].objective}" for i in range(self.parent_task_idx)])
+                constr += "\n".join([f"Objective {self.recursion_level - 1}, Task {i + 1}: {self.parent.tasks[i].objective}"
+                                     for i in range(self.parent_task_idx)])
                 constr += "\n"
             constr += "\n"
         directive = "\n".join([line.strip() for line in (directive.split("\n") if "\n" in directive else [directive])])
@@ -80,23 +82,23 @@ class Objective:
         return response
 
     def generate_context(self):
-        self.context["resources-available"]="None"
-        init_abilities="""
+        self.context["resources-available"] = "None"
+        init_abilities = """
 - Following Instructions: You follow instructions exceptionally well and pay close attention to them.
 - Generating Text: You are an AI and can generate text. You can use this ability for tasks such as writing, summarizing, making decisions, answering questions, and developing plans.
 - Using Tools: You can use any tools that are available to you.
         """
-        self.context["abilities-available"]=init_abilities.strip()
+        self.context["abilities-available"] = init_abilities.strip()
         directive = AgentOobaVars["directives"]["Generate thoughts directive"]
         response = ooba_call(self.make_prompt(directive, include_objectives=True)).strip()
-        context_regex = re.compile('Resources: (.+)\nAbilities: (.+)',re.DOTALL)
+        context_regex = re.compile('Resources: (.+)\nAbilities: (.+)', re.DOTALL)
         match = context_regex.search(response)
         if not match:
             return
         g = match.groups()
-        self.context["resources-needed"]=g[0]
-        self.context["abilities-needed"]=g[1]
-    
+        self.context["resources-needed"] = g[0]
+        self.context["abilities-needed"] = g[1]
+
     def split_objective(self):
         directive = AgentOobaVars["directives"]["Split objective directive"].replace("_MAX_TASKS_", str(AgentOobaVars["max-tasks"]))
         prompt = self.make_prompt(directive, include_objectives=True, context_objectives=True)
@@ -112,7 +114,7 @@ class Objective:
             else:
                 break
         return task_list
-            
+
     def assess_tools(self):
         for tool_name in AgentOobaVars["tools"]:
             if AgentOobaVars["tools"][tool_name]["active"]:
@@ -127,11 +129,11 @@ class Objective:
                     response = ooba_call(prompt).strip()
                     negative_responses = ["i cannot", "am unable"]
                     if not any([neg in response.lower() for neg in negative_responses]):
-                        self.context["resources-available"]=old
+                        self.context["resources-available"] = old
                         return True, AgentOobaVars["tools"][tool_name]["tool"], response
-                self.context["resources-available"]=old
+                self.context["resources-available"] = old
         return False, None, None
-    
+
     def prompt_objective_context(self):
         reverse_context = []
         p_it = self
@@ -140,10 +142,10 @@ class Objective:
             child = p_it
             p_it = p_it.parent
             if AgentOobaVars["expanded-context"]:
-                parent_task_list_str = "\n".join([f"Objective {r-1}, Task {str(i+1)}: {p_it.tasks[i] if isinstance(p_it.tasks[i], str) else p_it.tasks[i].objective}" for i in range(len(p_it.tasks))])
-                reverse_context.append(f"We have developed the following numbered list of tasks that one must complete to achieve Objective {r-1}:\n{parent_task_list_str}\n\nThe current task that we are at among these is Objective {r-1}, Task {p_it.current_task_idx+1}. We will refer to Objective {r-1}, Task {p_it.current_task_idx+1} as Objective {r}.")
+                parent_task_list_str = "\n".join([f"Objective {r - 1}, Task {str(i + 1)}: {p_it.tasks[i] if isinstance(p_it.tasks[i], str) else p_it.tasks[i].objective}" for i in range(len(p_it.tasks))])
+                reverse_context.append(f"We have developed the following numbered list of tasks that one must complete to achieve Objective {r - 1}:\n{parent_task_list_str}\n\nThe current task that we are at among these is Objective {r - 1}, Task {p_it.current_task_idx + 1}. We will refer to Objective {r - 1}, Task {p_it.current_task_idx + 1} as Objective {r}.")
             else:
-                reverse_context.append(f"In order to complete Objective {r-1}, one must complete Objective {r}. Objective {r} is: {child.objective}")
+                reverse_context.append(f"In order to complete Objective {r - 1}, one must complete Objective {r}. Objective {r} is: {child.objective}")
             r -= 1
         assert r == 1
         reverse_context.append(f"Objective 1 is: {p_it.objective}")
@@ -163,7 +165,7 @@ class Objective:
             resource = "\n\n".join(summaries)
         final_length = get_encoded_length(resource)
         if final_length < AgentOobaVars["max-context"]:
-            if final_length > (AgentOobaVars["max-context"]/4):
+            if final_length > (AgentOobaVars["max-context"] / 4):
                 directive = AgentOobaVars["directives"]["Summarize directive"].replace("_TEXT_", resource)
                 prompt = self.make_prompt(directive, include_objectives=False)
                 resource = ooba_call(prompt).strip()
@@ -214,10 +216,18 @@ class Objective:
                     if self.parent:
                         self.parent.current_task_idx += 1
             else:
-                current_task.process_current_task()
-        else:
-            if self.parent:
-                self.parent.current_task_idx += 1
+                try:
+                    current_task.process_current_task()
+                except Exception as e:
+                    self.output.append(f"Error: {str(e)}")
+                    self.output.append("Improper schema, please review the instructions.")
+                    self.retry_objective()
+
+    def retry_objective(self):
+        if self.parent:
+            self.parent.current_task_idx += 1
+            self.current_task_idx = 0
+            self.done = False
 
     def to_string(self, select):
         html_string = f'OBJECTIVE: {escape(self.objective)}<ul class="oobaAgentOutput">'
